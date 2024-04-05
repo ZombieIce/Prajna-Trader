@@ -1,5 +1,6 @@
 use crate::market_data_module::general_data;
 use serde::Deserialize;
+use serde_json::Value;
 
 #[derive(Debug, Deserialize)]
 pub struct WsKline {
@@ -70,4 +71,14 @@ impl WsDepth {
             .collect();
         general_data::Depth::new(asks, bids)
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WsEvent {
+    pub stream: String,
+    pub data: Value,
+}
+#[derive(Debug, serde::Deserialize)]
+pub struct WsEventKline {
+    pub k: WsKline,
 }

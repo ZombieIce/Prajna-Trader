@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 services = { path = "../services" }
 tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

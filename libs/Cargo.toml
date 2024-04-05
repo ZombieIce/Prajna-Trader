@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 mongodb = "2.8.2"
 serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }

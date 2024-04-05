@@ -11,3 +11,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tokio-tungstenite = { version = "0.21.0", features = ["native-tls"] }
 futures-util = "0.3.30"
+tracing = { workspace = true }
+reqwest = { workspace = true }
+chrono = { workspace = true }
+tokio = { workspace = true }
