@@ -88,6 +88,58 @@ impl WsDataEngine {
         full_topic
     }
 
+    async fn insert_klines(&mut self, symbol: &str) {
+        let insert_count = 1;
+        let insert_kline = self.kline_records.get(symbol).unwrap();
+        if insert_kline.len() >= insert_count {
+            match self.mongo_engine.fetch_latest_kline(symbol).await {
+                Ok(Some(last_kline)) => {
+                    println!(
+                        "insert_kline.get_open_time: {}",
+                        insert_kline.get(0).unwrap().get_open_time()
+                    );
+                    println!("last_kline.get_open_time: {}", last_kline.get_open_time());
+                    if insert_kline.get(0).unwrap().get_open_time() - last_kline.get_open_time()
+                        == 5 * 60 * 1000 * insert_count as i64
+                    {
+                        println!(
+                            "insert_kline.get_open_time: {}",
+                            insert_kline.get(0).unwrap().get_open_time()
+                        );
+
+                        // match self.mongo_engine.insert_kline(symbol, insert_kline).await {
+                        //     Ok(_) => {
+                        //         info!(
+                        //             "Insert klines {} count {} success!",
+                        //             symbol,
+                        //             insert_kline.len()
+                        //         );
+                        //     }
+                        //     Err(e) => {
+                        //         error!("Error: {}", e);
+                        //     }
+                        // }
+                    }
+                }
+                Ok(None) => match self.mongo_engine.insert_kline(symbol, insert_kline).await {
+                    Ok(_) => {
+                        info!(
+                            "Insert klines {} count {} success!",
+                            symbol,
+                            insert_kline.len()
+                        );
+                    }
+                    Err(e) => {
+                        error!("Error: {}", e);
+                    }
+                },
+                Err(e) => {
+                    error!("Insert klines {} Error: {}", symbol, e);
+                }
+            }
+        }
+    }
+
     async fn parse_ws_data(&mut self, data: String) {
         if let Ok(event) = serde_json::from_str::<ws_data::WsEvent>(&data) {
             let (stream, data) = (event.stream, event.data);
@@ -106,31 +158,7 @@ impl WsDataEngine {
                             .get_mut(symbol)
                             .unwrap()
                             .push(kline.clone());
-                        if self.kline_records.get(symbol).unwrap().len() >= 1 {
-                            match self.mongo_engine.fetch_latest_kline(symbol).await {
-                                Ok(Some(latest_kline)) => {
-                                    println!("mongo latest kline {:#?}", latest_kline);
-                                    if self
-                                        .kline_records
-                                        .get(symbol)
-                                        .unwrap()
-                                        .get(0)
-                                        .unwrap()
-                                        .get_open_time()
-                                        - latest_kline.get_open_time()
-                                        == 5 * 60 * 1 * 1000
-                                    {
-                                        println!("insert klines: {:#?}", self.kline_records);
-                                    }
-                                }
-                                Ok(None) => {
-                                    println!("None");
-                                }
-                                Err(e) => {
-                                    error!("Error: {}", e);
-                                }
-                            }
-                        }
+                        self.insert_klines(symbol).await;
                     }
                 }
             } else if stream == Self::get_depth_topic(symbol.to_string()) {

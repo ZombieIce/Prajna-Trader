@@ -1,5 +1,11 @@
 use crate::market_data_module::general_data;
-use mongodb::{bson::doc, error::Error, options::FindOneOptions, Client, Collection};
+use futures_util::stream::TryStreamExt;
+use mongodb::{
+    bson::doc,
+    error::Error,
+    options::{FindOneOptions, FindOptions},
+    Client, Collection,
+};
 
 #[derive(Clone)]
 pub struct MongoEngine {
@@ -88,6 +94,38 @@ impl MongoEngine {
                         Ok(_) => Ok(()),
                         Err(e) => Err(e),
                     }
+                }
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    pub async fn fetch_klines(
+        &self,
+        symbol: &str,
+        start_date: i64,
+    ) -> Result<Option<Vec<general_data::Kline>>, Error> {
+        match self.get_client().await {
+            Ok(client) => {
+                let db = client.database("klines");
+                let collections = db.list_collection_names(None).await?;
+                if collections.contains(&symbol.to_string()) {
+                    let collection: Collection<general_data::Kline> = db.collection(symbol);
+
+                    let filter = doc! { "open_time": { "$gte": start_date } };
+                    let options = FindOptions::builder().sort(doc! { "open_time": 1 }).build();
+                    match collection.find(filter, options).await {
+                        Ok(cursor) => match cursor.try_collect().await {
+                            Ok(res) => Ok(Some(res)),
+                            Err(e) => Err(e),
+                        },
+                        Err(e) => Err(e),
+                    }
+                } else {
+                    Err(Error::from(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "Collection not found",
+                    )))
                 }
             }
             Err(e) => Err(e),

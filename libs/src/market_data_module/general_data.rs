@@ -62,6 +62,38 @@ impl Kline {
         self.open_time
     }
 
+    pub fn get_open(&self) -> f64 {
+        self.open
+    }
+
+    pub fn get_high(&self) -> f64 {
+        self.high
+    }
+
+    pub fn get_low(&self) -> f64 {
+        self.low
+    }
+
+    pub fn get_close(&self) -> f64 {
+        self.close
+    }
+
+    pub fn get_volume(&self) -> f64 {
+        self.volume
+    }
+
+    pub fn get_number_of_trades(&self) -> i64 {
+        self.number_of_trades
+    }
+
+    pub fn get_active_buy_asset_volume(&self) -> f64 {
+        self.active_buy_asset_volume
+    }
+
+    pub fn get_active_buy_quote_volume(&self) -> f64 {
+        self.active_buy_quote_volume
+    }
+
     pub fn get_close_time(&self) -> i64 {
         self.close_time
     }

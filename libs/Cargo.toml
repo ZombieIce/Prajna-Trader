@@ -10,3 +10,9 @@ mongodb = "2.8.2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
+futures-util = { workspace = true }
+tokio = { workspace = true }
+polars = { workspace = true }
+chrono = { workspace = true }
+
+# quant_libs = { path = "../quant_libs" }
