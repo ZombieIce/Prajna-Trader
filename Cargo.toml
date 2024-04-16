@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["libs", "services", "trader"]
+members = ["libs", "services", "trader", "quant_libs"]
 
 [workspace.dependencies]
 tokio = { version = "1.37.0", features = ["full"] }

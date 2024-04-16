@@ -7,11 +7,23 @@ use crate::market_data_module::general_data;
 use crate::market_data_module::general_data::Kline;
 use crate::market_data_module::general_enum;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct TargetPosition(f64);
 impl TargetPosition {
     pub fn new(qty: f64) -> Self {
         Self(qty)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PnlRecord {
+    timestamp: i64,
+    pnl: f64,
+}
+
+impl PnlRecord {
+    pub fn new(timestamp: i64, pnl: f64) -> Self {
+        Self { timestamp, pnl }
     }
 }
 
@@ -35,6 +47,7 @@ pub struct StrategyContext {
     interval: general_enum::Interval,
     is_back_test: bool,
     strategy: Box<dyn BaseStrategy>,
+    pnl_records: Vec<PnlRecord>,
 }
 
 impl StrategyContext {
@@ -55,6 +68,7 @@ impl StrategyContext {
             interval,
             is_back_test,
             strategy,
+            pnl_records: vec![],
         }
     }
 
@@ -126,12 +140,17 @@ impl StrategyContext {
         for (symbol, target_position) in orders.iter() {
             let target_position = target_position.0;
             let price = klines.get(symbol).unwrap().get_open();
+            let timestamp = klines.get(symbol).unwrap().get_open_time();
 
             if let Some(current_position) = self.portfolio.get_position(&symbol) {
-                let order = Order::new(price, target_position - current_position.get_qty());
+                let order = Order::new(
+                    timestamp,
+                    price,
+                    target_position - current_position.get_qty(),
+                );
                 res.insert(symbol.clone(), order);
             } else {
-                let order = Order::new(price, target_position);
+                let order = Order::new(timestamp, price, target_position);
                 res.insert(symbol.clone(), order);
             }
         }
@@ -167,7 +186,12 @@ impl StrategyContext {
             // portfolio update market price
             self.portfolio
                 .update_market_price(self.format_his_price(&klines));
+            self.pnl_records.push(PnlRecord::new(
+                klines.get(&self.symbols[0]).unwrap().get_open_time(),
+                self.portfolio.get_pnl(),
+            ));
         }
+        println!("pnl_records: {:#?}", self.pnl_records);
     }
 
     pub async fn real_trade(&self) {

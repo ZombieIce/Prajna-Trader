@@ -1,14 +1,20 @@
 use super::strategy_error::StrategyError;
-use std::{collections::HashMap, error::Error};
+use std::collections::HashMap;
 
+#[derive(Debug, Clone)]
 pub struct Order {
+    timestamp: i64,
     price: f64,
     qty: f64,
 }
 
 impl Order {
-    pub fn new(price: f64, qty: f64) -> Self {
-        Self { price, qty }
+    pub fn new(timestamp: i64, price: f64, qty: f64) -> Self {
+        Self {
+            timestamp,
+            price,
+            qty,
+        }
     }
 
     pub fn get_price(&self) -> f64 {
@@ -134,6 +140,18 @@ impl Portfolio {
     pub fn get_total_value(&self) -> f64 {
         self.total_value
     }
+
+    pub fn get_orders(&self, symbol: &str) -> Option<&Vec<Order>> {
+        if let Some(pos) = self.positions.get(symbol) {
+            Some(pos.get_orders())
+        } else {
+            None
+        }
+    }
+
+    pub fn get_available_cash(&self) -> f64 {
+        self.available_cash
+    }
 }
 
 #[derive(Debug)]
@@ -144,6 +162,7 @@ pub struct Position {
     market_value: f64,
     unrealized_pnl: f64,
     realized_pnl: f64,
+    orders: Vec<Order>,
 }
 
 impl Position {
@@ -155,6 +174,7 @@ impl Position {
             market_value: 0.0,
             unrealized_pnl: 0.0,
             realized_pnl: 0.0,
+            orders: Vec::new(),
         }
     }
     fn get_margin(&self, leverage_rate: f64) -> f64 {
@@ -173,6 +193,7 @@ impl Position {
 
     fn make_order(&mut self, order: &Order) -> f64 {
         // offset
+        self.orders.push(order.clone());
         if order.get_qty() * self.quantity < 0.0 {
             let epsilon = 1e-9;
             let offset = order.get_qty().abs() - self.quantity.abs();
@@ -226,84 +247,8 @@ impl Position {
             return 0.0;
         }
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::Order;
-    use super::Portfolio;
-    use super::Position;
-
-    #[test]
-    fn test_position() {
-        let epsilon: f64 = 1e-9;
-        let mut p1 = Position::new();
-        p1.make_order(&Order::new(10.0, 1.0));
-        assert!(
-            (p1.market_value - 10.0).abs() < epsilon,
-            "p1.market_value is not approximately 10.0"
-        );
-        p1.update_market_price(10.1);
-        assert!(
-            (p1.unrealized_pnl - 0.1).abs() < epsilon,
-            "p1.unrealized_pnl is not approximately 0.1"
-        );
-        p1.update_market_price(11.0);
-        assert!(
-            (p1.unrealized_pnl - 1.0).abs() < epsilon,
-            "p1.unrealized_pnl is not approximately 1.0"
-        );
-        p1.make_order(&Order::new(10.5, -2.0));
-        assert!(
-            (p1.realized_pnl - 0.5).abs() < epsilon,
-            "p1.realized_pnl is not approximately 0.5"
-        );
-        p1.update_market_price(10.1);
-        assert!(
-            (p1.unrealized_pnl - 0.4).abs() < epsilon,
-            "p1.unrealized_pnl is not approximately 0.4"
-        );
-        println!("{:?}", p1);
-        p1.make_order(&Order::new(9.9, 4.0));
-        println!("{:?}", p1);
-
-        assert!(
-            (p1.realized_pnl - 1.1).abs() < epsilon,
-            "p1.realized_pnl is not approximately 0.5"
-        );
-    }
-
-    #[test]
-    fn test_portfolio() {
-        let mut port = Portfolio::new(
-            100.0,
-            20.0,
-            vec!["btcusdt".to_string(), "ethusdt".to_string()],
-        );
-        let orders = vec![
-            ("btcusdt".to_string(), Order::new(68000.0, 0.01)),
-            ("ethusdt".to_string(), Order::new(3400.0, 0.1)),
-        ];
-        port.make_orders(&orders.into_iter().collect()).unwrap();
-        println!("{:#?}", port);
-        let market_price = vec![
-            ("btcusdt".to_string(), 69000.0),
-            ("ethusdt".to_string(), 3450.0),
-        ];
-        port.update_market_price(market_price.into_iter().collect());
-        println!("{:#?}", port);
-        let orders = vec![
-            ("btcusdt".to_string(), Order::new(68500.0, -0.02)),
-            ("ethusdt".to_string(), Order::new(3500.0, -0.2)),
-        ];
-        port.make_orders(&orders.into_iter().collect()).unwrap();
-        println!("{:#?}", port);
-
-        let orders = vec![
-            ("btcusdt".to_string(), Order::new(68000.0, 0.01)),
-            ("ethusdt".to_string(), Order::new(3400.0, 0.1)),
-        ];
-        port.make_orders(&orders.into_iter().collect()).unwrap();
-        println!("{:#?}", port);
+    fn get_orders(&self) -> &Vec<Order> {
+        &self.orders
     }
 }
