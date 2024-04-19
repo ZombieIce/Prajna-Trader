@@ -1,5 +1,6 @@
 use chrono::{DateTime, FixedOffset};
 use chrono::{TimeZone, Utc};
+use libs::tools::time_tools;
 use libs::{
     base_strategy::{
         base_strategy::{BaseStrategy, StrategyContext, TargetPosition},
@@ -10,6 +11,7 @@ use libs::{
 use quant_libs::tech_analysis::ma;
 use services::market_data_engine::market_data_engine::MarketDataEngine;
 use std::collections::HashMap;
+use std::fmt::format;
 use tracing::info;
 use tracing_subscriber;
 
@@ -57,35 +59,33 @@ impl BaseStrategy for TestStrategy {
         self.sma_slow.add(kline.get_close());
         self.ema_fast.add(kline.get_close());
         self.ema_slow.add(kline.get_close());
+        let cur_time = time_tools::get_datetime_from_timestamp(kline.get_open_time()).to_string();
 
         if let Some(current_position) = portfolio.get_position(&self.symbol) {
-            let mut new_pos = 0.0;
-            if current_position.get_qty() != 0.0 {
-                println!("portfolio: {:#?}", portfolio.get_pnl());
-            }
+            let mut new_pos = current_position.get_qty();
             if (current_position.get_qty() > 0.0 && kline.get_close() < self.sma_slow.get())
                 || (current_position.get_qty() < 0.0 && kline.get_close() > self.sma_slow.get())
             {
-                new_pos = -current_position.get_qty();
-                let datetime = kline.get_open_time();
-                let datetime_utc = Utc.timestamp_millis_opt(datetime).unwrap();
-                let datetime_utc8 = FixedOffset::east_opt(8 * 3600)
-                    .unwrap()
-                    .from_utc_datetime(&datetime_utc.naive_utc());
-                println!(
-                        "datetime: {:#?}, sma_slow: {}, sma_fast: {}, ema_fast: {}, ema_slow: {}, last_fast_ema: {}, last_slow_ema: {}, BUY!!!!",
-                        datetime_utc8,
-                        self.sma_slow.get(),
-                        self.sma_fast.get(),
-                        self.ema_fast.get(),
-                        self.ema_slow.get(),
-                        last_fast_ema,
-                        last_slow_ema
-                    );
+                new_pos = 0.0;
+                let close_info = format!(
+                    "datetime: {}, sma_slow: {}, close: {}",
+                    cur_time,
+                    self.sma_slow.get(),
+                    kline.get_close()
+                );
+
                 if current_position.get_qty() > 0.0 {
-                    println!("CLOSE LONG POSITION: {}", current_position.get_qty());
+                    println!(
+                        "{} CLOSE LONG POSITION: {}, SELL!!!!",
+                        close_info,
+                        current_position.get_qty()
+                    );
                 } else {
-                    println!("CLOSE SHORT POSITION: {}", current_position.get_qty());
+                    println!(
+                        "{} CLOSE SHORT POSITION: {}, BUY!!!!",
+                        close_info,
+                        current_position.get_qty()
+                    );
                 }
             }
             if current_position.get_qty() == 0.0 {
@@ -95,14 +95,9 @@ impl BaseStrategy for TestStrategy {
                     && self.sma_slow.get() != 0.0
                 {
                     let available_cash = portfolio.get_available_cash();
-                    let datetime = kline.get_open_time();
-                    let datetime_utc = Utc.timestamp_millis_opt(datetime).unwrap();
-                    let datetime_utc8 = FixedOffset::east_opt(8 * 3600)
-                        .unwrap()
-                        .from_utc_datetime(&datetime_utc.naive_utc());
                     println!(
-                        "datetime: {:#?}, sma_slow: {}, sma_fast: {}, ema_fast: {}, ema_slow: {}, last_fast_ema: {}, last_slow_ema: {}, BUY!!!!",
-                        datetime_utc8,
+                        "datetime: {}, sma_slow: {}, sma_fast: {}, ema_fast: {}, ema_slow: {}, last_fast_ema: {}, last_slow_ema: {}, BUY!!!!",
+                        cur_time,
                         self.sma_slow.get(),
                         self.sma_fast.get(),
                         self.ema_fast.get(),
@@ -118,14 +113,9 @@ impl BaseStrategy for TestStrategy {
                     && self.sma_fast.get() != 0.0
                 {
                     let available_cash = portfolio.get_available_cash();
-                    let datetime = kline.get_open_time();
-                    let datetime_utc = Utc.timestamp_millis_opt(datetime).unwrap();
-                    let datetime_utc8 = FixedOffset::east_opt(8 * 3600)
-                        .unwrap()
-                        .from_utc_datetime(&datetime_utc.naive_utc());
                     println!(
-                        "datetime: {:#?}, sma_slow: {}, sma_fast: {}, ema_fast: {}, ema_slow: {}, last_fast_ema: {}, last_slow_ema: {}, SELL!!!!",
-                        datetime_utc8,
+                        "datetime: {}, sma_slow: {}, sma_fast: {}, ema_fast: {}, ema_slow: {}, last_fast_ema: {}, last_slow_ema: {}, SELL!!!!",
+                        cur_time,
                         self.sma_slow.get(),
                         self.sma_fast.get(),
                         self.ema_fast.get(),
@@ -136,7 +126,8 @@ impl BaseStrategy for TestStrategy {
                     new_pos -= available_cash / kline.get_close();
                 }
             }
-            if new_pos != 0.0 {
+
+            if new_pos != current_position.get_qty() {
                 res.insert(self.symbol.clone(), TargetPosition::new(new_pos));
             }
         }
@@ -174,9 +165,8 @@ async fn main() {
     // m_engine.subscribe_symbols(&symbols);
     // m_engine.start().await;
     let symbol = "btcusdt".to_string();
-    let start_date_timestamp = DateTime::parse_from_rfc3339("2024-02-27T00:00:00Z")
-        .unwrap()
-        .timestamp_millis();
+    let start_date_timestamp =
+        time_tools::get_datetime_from_str("2023-01-01 00:00:00").timestamp_millis();
 
     let test_strategy =
         TestStrategy::new("TestStrategy".to_string(), symbol.clone(), 33, 88, 8, 13);

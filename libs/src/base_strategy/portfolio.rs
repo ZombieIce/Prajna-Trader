@@ -6,6 +6,7 @@ pub struct Order {
     timestamp: i64,
     price: f64,
     qty: f64,
+    fee: f64,
 }
 
 impl Order {
@@ -14,7 +15,12 @@ impl Order {
             timestamp,
             price,
             qty,
+            fee: 0.0,
         }
+    }
+
+    pub fn get_timestamp(&self) -> i64 {
+        self.timestamp
     }
 
     pub fn get_price(&self) -> f64 {
@@ -23,6 +29,22 @@ impl Order {
 
     pub fn get_qty(&self) -> f64 {
         self.qty
+    }
+
+    pub fn set_price(&mut self, price: f64) {
+        self.price = price;
+    }
+
+    pub fn set_qty(&mut self, qty: f64) {
+        self.qty = qty;
+    }
+
+    pub fn set_fee(&mut self, fee: f64) {
+        self.fee = fee;
+    }
+
+    pub fn get_fee(&self) -> f64 {
+        self.fee
     }
 }
 
@@ -84,9 +106,12 @@ impl Portfolio {
         self.update_cash_pnl();
     }
 
-    pub fn make_orders(&mut self, orders: &HashMap<String, Order>) -> Result<(), StrategyError> {
+    pub fn make_orders(
+        &mut self,
+        orders: &mut HashMap<String, Order>,
+    ) -> Result<(), StrategyError> {
         let mut realized_pnl_sum: f64 = 0.0;
-        for (symbol, order) in orders.iter() {
+        for (symbol, order) in orders.iter_mut() {
             if let Some(pos) = self.positions.get_mut(symbol) {
                 let cur_fee = order.get_price() * order.get_qty().abs() * self.fee_rate;
                 let cur_margin = order.get_price() * order.get_qty().abs() / self.leverage_rate;
@@ -109,7 +134,8 @@ impl Portfolio {
                 } else {
                     self.available_cash -= cur_fee + new_margin - prev_margin;
                     self.freezed_cash += new_margin - prev_margin;
-                    realized_pnl_sum += pos.make_order(order);
+                    order.set_fee(cur_fee);
+                    realized_pnl_sum += pos.make_order(&order);
                     self.fee += cur_fee;
                 }
             }
@@ -122,7 +148,7 @@ impl Portfolio {
     }
 
     pub fn get_pnl(&self) -> f64 {
-        self.unrealized_pnl + self.realized_pnl
+        self.unrealized_pnl + self.realized_pnl - self.fee
     }
 
     pub fn get_unrealized_pnl(&self) -> f64 {
@@ -151,6 +177,10 @@ impl Portfolio {
 
     pub fn get_available_cash(&self) -> f64 {
         self.available_cash
+    }
+
+    pub fn get_starting_cash(&self) -> f64 {
+        self.starting_cash
     }
 }
 

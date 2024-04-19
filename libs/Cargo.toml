@@ -14,5 +14,6 @@ futures-util = { workspace = true }
 tokio = { workspace = true }
 polars = { workspace = true }
 chrono = { workspace = true }
+plotters = { workspace = true }
 
 # quant_libs = { path = "../quant_libs" }
