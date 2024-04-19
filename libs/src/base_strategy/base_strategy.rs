@@ -296,7 +296,7 @@ impl StrategyContext {
             .right_y_label_area_size(20)
             .margin(20)
             .caption(&title, ("sans-serif", 20))
-            .build_cartesian_2d(start_time..end_time, (min_value..max_value))?
+            .build_cartesian_2d(start_time..end_time, min_value..max_value)?
             .set_secondary_coord(start_time..end_time, max_drawdown..0.0);
 
         uppper_chart

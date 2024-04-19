@@ -9,6 +9,7 @@ edition = "2021"
 libs = { path = "../libs" }
 services = { path = "../services" }
 quant_libs = { path = "../quant_libs" }
+strategies = { path = "../strategies" }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
