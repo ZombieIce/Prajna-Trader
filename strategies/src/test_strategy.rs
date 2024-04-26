@@ -1,7 +1,7 @@
-use libs::base_strategy::base_strategy::{BaseStrategy, TargetPosition};
-use libs::base_strategy::portfolio;
-use libs::market_data_module::general_data;
-use libs::tools::time_tools;
+use base_libs::base_strategy::base_strategy::{BaseStrategy, TargetPosition};
+use base_libs::base_strategy::portfolio;
+use base_libs::market_data_module::general_data;
+use base_libs::tools::time_tools;
 use quant_libs::tech_analysis::ma;
 use std::collections::HashMap;
 

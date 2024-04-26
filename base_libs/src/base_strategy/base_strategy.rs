@@ -441,8 +441,7 @@ impl StrategyContext {
                     continue;
                 }
                 println!("symbol: {}", s);
-                let mut pnl_vec: Vec<f64> = Vec::new();
-                pnl_vec = self.win_rate_statistic(orders);
+                let pnl_vec = self.win_rate_statistic(orders);
                 match self.back_test_plot(pnl_vec) {
                     Ok(_) => {}
                     Err(e) => {

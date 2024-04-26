@@ -1,14 +1,15 @@
-use libs::base_strategy::base_strategy::{BaseStrategy, TargetPosition};
-use libs::base_strategy::portfolio;
-use libs::market_data_module::general_data;
-use libs::tools::time_tools;
+use base_libs::base_strategy::base_strategy::{BaseStrategy, TargetPosition};
+use base_libs::base_strategy::portfolio;
+use base_libs::market_data_module::general_data;
+use base_libs::tools::time_tools;
 use quant_libs::tech_analysis::ma;
 use quant_libs::tech_analysis::rsi;
+use quant_libs::tech_analysis::super_trend;
 use std::collections::HashMap;
 pub struct RmaStrategy {
     strategy_name: String,
     symbol: String,
-    rsi: rsi::RSI,
+    super_trend: super_trend::SuperTrend,
 }
 
 impl RmaStrategy {
@@ -16,7 +17,7 @@ impl RmaStrategy {
         Self {
             strategy_name,
             symbol,
-            rsi: rsi::RSI::new(period),
+            super_trend: super_trend::SuperTrend::new(period, 3.0),
         }
     }
 }
@@ -28,11 +29,19 @@ impl BaseStrategy for RmaStrategy {
         portfolio: &portfolio::Portfolio,
     ) -> HashMap<String, TargetPosition> {
         let kline = klines.get(&self.symbol).unwrap();
-        self.rsi.add(kline.get_close());
-
+        self.super_trend.add(kline.clone());
         let cur_time = time_tools::get_datetime_from_timestamp(kline.get_open_time()).to_string();
-        println!("Time: {}, rsi: {}", cur_time, self.rsi.get());
+        println!(
+            "{}: cur_up: {} cur_dn: {} cur_trend: {}",
+            cur_time,
+            self.super_trend.get().0,
+            self.super_trend.get().1,
+            self.super_trend.get().2,
+        );
         let res = HashMap::new();
         res
+    }
+    fn get_strategy_name(&self) -> String {
+        self.strategy_name.clone()
     }
 }

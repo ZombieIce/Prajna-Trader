@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use futures_util::{SinkExt, StreamExt};
-use libs::market_data_module::{binance_data::ws_data, general_data};
-use libs::mongo_engine::MongoEngine;
+use base_libs::market_data_module::{binance_data::ws_data, general_data};
+use base_libs::mongo_engine::MongoEngine;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{error, info};
 

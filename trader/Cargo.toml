@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-libs = { path = "../libs" }
+base_libs = { path = "../base_libs" }
 services = { path = "../services" }
 quant_libs = { path = "../quant_libs" }
 strategies = { path = "../strategies" }

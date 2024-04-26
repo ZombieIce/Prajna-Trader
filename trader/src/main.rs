@@ -1,7 +1,8 @@
-use libs::tools::time_tools;
-use libs::{base_strategy::base_strategy::StrategyContext, market_data_module::general_enum};
+use base_libs::tools::time_tools;
+use base_libs::{base_strategy::base_strategy::StrategyContext, market_data_module::general_enum};
 use services::market_data_engine::market_data_engine::MarketDataEngine;
 use strategies::five_rsi_strategy;
+use strategies::rma_strategy::RmaStrategy;
 use tracing::info;
 use tracing_subscriber;
 
@@ -38,13 +39,14 @@ async fn main() {
 
     // let test_strategy =
     //     TestStrategy::new("TestStrategy".to_string(), symbol.clone(), 33, 88, 8, 13);
-    let test_strategy =
-        five_rsi_strategy::FiveRsiStrategy::new("five_rsi_strategy".to_string(), symbol.clone(), 3, 6);
+    // let test_strategy =
+    //     five_rsi_strategy::FiveRsiStrategy::new("five_rsi_strategy".to_string(), symbol.clone(), 3, 6);
+    let test_strategy = RmaStrategy::new("RmaStrategy".to_string(), symbol.clone(), 16);
     let mut strategy = StrategyContext::new(
         vec![symbol.clone()],
         1000.0,
         start_date_timestamp,
-        general_enum::Interval::Min5,
+        general_enum::Interval::Min15,
         20.0,
         true,
         Box::new(test_strategy),
