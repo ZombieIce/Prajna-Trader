@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 use super::general_enum;
@@ -156,14 +158,27 @@ pub struct SymbolInfo {
     symbol: String,
     price_precision: i64,
     quantity_precision: i64,
+    min_notional: f64,
+    min_quantity: f64,
+    max_quantity: f64,
 }
 
 impl SymbolInfo {
-    pub fn new(symbol: String, price_precision: i64, quantity_precision: i64) -> Self {
+    pub fn new(
+        symbol: String,
+        price_precision: i64,
+        quantity_precision: i64,
+        min_notional: f64,
+        min_quantity: f64,
+        max_quantity: f64,
+    ) -> Self {
         SymbolInfo {
             symbol,
             price_precision,
             quantity_precision,
+            min_notional,
+            min_quantity,
+            max_quantity,
         }
     }
 
@@ -177,6 +192,18 @@ impl SymbolInfo {
 
     pub fn get_quantity_precision(&self) -> i64 {
         self.quantity_precision
+    }
+
+    pub fn get_min_notional(&self) -> f64 {
+        self.min_notional
+    }
+
+    pub fn get_min_quantity(&self) -> f64 {
+        self.min_quantity
+    }
+
+    pub fn get_max_quantity(&self) -> f64 {
+        self.max_quantity
     }
 }
 
@@ -224,5 +251,17 @@ impl ExchangeInfo {
 
     pub fn get_market_type(&self) -> &String {
         &self.market_type
+    }
+
+    pub fn get_symbol_info_map(&self, symbols: &Vec<String>) -> HashMap<String, SymbolInfo> {
+        let mut res = HashMap::new();
+        for symbol in symbols {
+            for symbol_info in &self.symbol_info {
+                if symbol_info.get_symbol().to_lowercase() == symbol.to_lowercase() {
+                    res.insert(symbol.clone(), symbol_info.clone());
+                }
+            }
+        }
+        res
     }
 }

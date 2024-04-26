@@ -10,6 +10,9 @@ fn resample_kline_data(
     interval: &general_enum::Interval,
 ) -> Vec<general_data::Kline> {
     let klines = cut_off_kline_data(klines, &interval);
+    if *interval == general_enum::Interval::Min5 {
+        return klines;
+    }
     let res_kline = klines
         .chunks(interval.get_divider())
         .filter_map(|chunk| {
@@ -39,6 +42,7 @@ fn cut_off_kline_data(
             let cur_time = DateTime::from_timestamp_millis(klines[i].get_open_time()).unwrap();
             match interval {
                 general_enum::Interval::Min5 => {
+                    res = klines;
                     break;
                 }
                 general_enum::Interval::Min10 => {

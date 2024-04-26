@@ -1,3 +1,5 @@
+use crate::tools::math_tools;
+
 use super::strategy_error::StrategyError;
 use std::collections::HashMap;
 
@@ -45,6 +47,17 @@ impl Order {
 
     pub fn get_fee(&self) -> f64 {
         self.fee
+    }
+
+    pub fn format_order(&mut self, px_precision: i64, qty_precision: i64) {
+        self.set_price(math_tools::round_to_precision(
+            self.get_price(),
+            px_precision,
+        ));
+        self.set_qty(math_tools::round_to_precision(
+            self.get_qty(),
+            qty_precision,
+        ));
     }
 }
 

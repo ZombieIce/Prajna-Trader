@@ -12,6 +12,7 @@ impl MarketType {
     }
 }
 
+#[derive(PartialEq)]
 pub enum Interval {
     Min5,
     Min10,

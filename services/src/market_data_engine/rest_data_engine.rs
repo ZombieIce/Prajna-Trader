@@ -54,6 +54,9 @@ impl RestDataEngine {
     fn parse_symbol_info(&self, symbol_info: &Value) -> SymbolInfo {
         let symbol_name = symbol_info.get("symbol").unwrap().as_str().unwrap();
         let mut price_precision = symbol_info.get("pricePrecision").unwrap().as_i64().unwrap();
+        let mut notional = 0.0;
+        let mut min_qty = 0.0;
+        let mut max_qty = 0.0;
         let quantity_precision = symbol_info
             .get("quantityPrecision")
             .unwrap()
@@ -73,9 +76,46 @@ impl RestDataEngine {
                     let tick_size = tick_size.parse::<f64>().unwrap();
                     price_precision = -tick_size.log10() as i64;
                 }
+                if filter_type.as_str().unwrap() == "MIN_NOTIONAL" {
+                    let cur_notional = filter
+                        .as_object()
+                        .unwrap()
+                        .get("notional")
+                        .unwrap()
+                        .as_str()
+                        .unwrap();
+                    notional = cur_notional.parse::<f64>().unwrap();
+                }
+                if filter_type.as_str().unwrap() == "MARKET_LOT_SIZE" {
+                    let cur_min_qty = filter
+                        .as_object()
+                        .unwrap()
+                        .get("minQty")
+                        .unwrap()
+                        .as_str()
+                        .unwrap();
+                    min_qty = cur_min_qty.parse::<f64>().unwrap();
+                }
+                if filter_type.as_str().unwrap() == "MARKET_LOT_SIZE" {
+                    let cur_max_qty = filter
+                        .as_object()
+                        .unwrap()
+                        .get("maxQty")
+                        .unwrap()
+                        .as_str()
+                        .unwrap();
+                    max_qty = cur_max_qty.parse::<f64>().unwrap();
+                }
             }
         }
-        SymbolInfo::new(symbol_name.to_string(), price_precision, quantity_precision)
+        SymbolInfo::new(
+            symbol_name.to_string(),
+            price_precision,
+            quantity_precision,
+            notional,
+            min_qty,
+            max_qty,
+        )
     }
 
     pub fn subscribe_symbols(&mut self, symbols: &Vec<String>) {

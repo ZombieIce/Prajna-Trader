@@ -24,6 +24,32 @@ impl EMA {
     }
 }
 
+pub struct RMA {
+    alpha: f64,
+    last_rma: f64,
+}
+
+impl RMA {
+    pub fn new(period: usize) -> Self {
+        Self {
+            alpha: 1.0 / period as f64,
+            last_rma: 0.0,
+        }
+    }
+
+    pub fn add(&mut self, val: f64) {
+        if self.last_rma == 0.0 {
+            self.last_rma = val;
+        } else {
+            self.last_rma = self.alpha * val + (1.0 - self.alpha) * self.last_rma;
+        }
+    }
+
+    pub fn get(&self) -> f64 {
+        self.last_rma
+    }
+}
+
 pub struct SMA {
     period: usize,
     data: Vec<f64>,

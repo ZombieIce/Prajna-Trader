@@ -2,10 +2,12 @@ use std::collections::HashMap;
 
 use super::portfolio::Order;
 use super::portfolio::Portfolio;
+use super::strategy_error::StrategyError;
 use crate::kline_basic;
 use crate::market_data_module::general_data;
 use crate::market_data_module::general_data::Kline;
 use crate::market_data_module::general_enum;
+use crate::mongo_engine::MongoEngine;
 use crate::tools::time_tools;
 use chrono::Duration;
 use plotters::prelude::*;
@@ -68,6 +70,7 @@ pub struct StrategyContext {
     is_back_test: bool,
     strategy: Box<dyn BaseStrategy>,
     pnl_records: Vec<PnlRecord>,
+    symbol_infos: HashMap<String, general_data::SymbolInfo>,
 }
 
 impl StrategyContext {
@@ -89,15 +92,33 @@ impl StrategyContext {
             is_back_test,
             strategy,
             pnl_records: vec![],
+            symbol_infos: HashMap::new(),
         }
     }
 
-    async fn init_kline(&mut self) {
+    async fn init_symbol_info(&mut self) {
+        let mongo_engine = MongoEngine::default();
+        match mongo_engine.get_exchange_info().await {
+            Some(exchange_info) => {
+                self.symbol_infos = exchange_info.get_symbol_info_map(&self.symbols);
+            }
+            None => {
+                println!("error: fetch exchange info failed");
+            }
+        }
+    }
+
+    async fn init_data(&mut self) {
+        self.init_symbol_info().await;
         let mut max_start_date: i64 = 0;
         let mut tmp_kline_data: HashMap<String, Vec<general_data::Kline>> = HashMap::new();
         for symbol in &self.symbols {
             match kline_basic::fetch_klines(symbol, self.start_date, &self.interval).await {
                 Some(klines) => {
+                    if klines.len() == 0 {
+                        println!("error: fetch kliens {symbol} failed");
+                        return;
+                    }
                     if klines[0].get_open_time() > max_start_date {
                         max_start_date = klines[0].get_open_time();
                     }
@@ -143,7 +164,7 @@ impl StrategyContext {
     }
 
     pub async fn start(&mut self) {
-        self.init_kline().await;
+        self.init_data().await;
         if self.is_back_test {
             self.back_test();
         } else {
@@ -155,26 +176,53 @@ impl StrategyContext {
         &self,
         orders: &HashMap<String, TargetPosition>,
         klines: &HashMap<String, Kline>,
-    ) -> HashMap<String, Order> {
+    ) -> Result<HashMap<String, Order>, StrategyError> {
         let mut res: HashMap<String, Order> = HashMap::new();
         for (symbol, target_position) in orders.iter() {
             let target_position = target_position.0;
             let price = klines.get(symbol).unwrap().get_close();
             let timestamp = klines.get(symbol).unwrap().get_open_time();
+            let symbol_info = self.symbol_infos.get(symbol).unwrap();
 
             if let Some(current_position) = self.portfolio.get_position(&symbol) {
-                let order = Order::new(
+                let mut order = Order::new(
                     timestamp,
                     price,
                     target_position - current_position.get_qty(),
                 );
+                order.format_order(
+                    symbol_info.get_price_precision(),
+                    symbol_info.get_quantity_precision(),
+                );
+                if order.get_qty().abs() <= symbol_info.get_min_quantity() {
+                    return Err(StrategyError::OrderQuantityError(format!(
+                        "order quantity {} is too small with min_qty: {}",
+                        order.get_qty(),
+                        symbol_info.get_min_quantity()
+                    )));
+                }
+                if order.get_qty().abs() * order.get_price() < symbol_info.get_min_notional() {
+                    return Err(StrategyError::OrderNotionalError(format!(
+                        "order notional {} is too small with min_notional: {}",
+                        order.get_qty() * order.get_price(),
+                        symbol_info.get_min_notional()
+                    )));
+                }
+
                 res.insert(symbol.clone(), order);
             } else {
-                let order = Order::new(timestamp, price, target_position);
+                let mut order = Order::new(timestamp, price, target_position);
+                order.format_order(
+                    symbol_info.get_price_precision(),
+                    symbol_info.get_quantity_precision(),
+                );
+                if order.get_qty() <= symbol_info.get_min_quantity() {
+                    continue;
+                }
                 res.insert(symbol.clone(), order);
             }
         }
-        res
+        Ok(res)
     }
 
     fn conver_backtest_order(
@@ -187,6 +235,13 @@ impl StrategyContext {
             let price = klines.get(symbol).unwrap().get_open();
             let timestamp = klines.get(symbol).unwrap().get_open_time();
             let order = Order::new(timestamp, price, order.get_qty());
+            println!(
+                "MAKE ORDER datetime: {}, symbol: {}, price: {}, qty: {}",
+                time_tools::get_datetime_from_timestamp(timestamp),
+                symbol,
+                price,
+                order.get_qty()
+            );
             res.insert(symbol.clone(), order);
         }
         res
@@ -195,6 +250,7 @@ impl StrategyContext {
     pub fn back_test(&mut self) {
         let format_klines = self.format_his_klines();
         let mut tmp_orders = HashMap::new();
+
         for klines in format_klines {
             if tmp_orders.len() > 0 {
                 self.conver_backtest_order(&tmp_orders, &klines);
@@ -204,11 +260,20 @@ impl StrategyContext {
                         println!("error: {}", e);
                     }
                 }
+                println!()
             }
 
             let orders = self.strategy.on_schedule(&klines, &self.portfolio);
             if orders.len() > 0 {
-                tmp_orders = self.convert_orders(&orders, &klines);
+                match self.convert_orders(&orders, &klines) {
+                    Ok(orders) => {
+                        tmp_orders = orders;
+                    }
+                    Err(e) => {
+                        println!("error: {}", e);
+                        break;
+                    }
+                }
             } else {
                 tmp_orders.clear();
             }
@@ -223,7 +288,7 @@ impl StrategyContext {
         self.back_test_summary();
     }
 
-    fn back_test_plot(&self) -> Result<(), Box<dyn std::error::Error>> {
+    fn back_test_plot(&self, pnl_vec: Vec<f64>) -> Result<(), Box<dyn std::error::Error>> {
         let title = format!(
             "{} {}",
             self.strategy.get_strategy_name(),
@@ -331,6 +396,39 @@ impl StrategyContext {
             0.0,
             &RED.mix(0.3),
         ))?;
+
+        let format_pnl: Vec<i64> = pnl_vec.iter().map(|pnl| pnl.round() as i64).collect();
+        let (lower_bound, upper_bound) = (
+            format_pnl
+                .iter()
+                .fold(0, |acc, pnl| if *pnl < acc { *pnl } else { acc })
+                - 1,
+            format_pnl
+                .iter()
+                .fold(0, |acc, pnl| if *pnl > acc { *pnl } else { acc })
+                + 1,
+        );
+        let mut lower_chart = ChartBuilder::on(&lower)
+            .x_label_area_size(5)
+            .y_label_area_size(20)
+            .right_y_label_area_size(20)
+            .margin(20)
+            .caption("order pnl histogram", ("sans-serif", 20))
+            .build_cartesian_2d(lower_bound..upper_bound, 0..format_pnl.len() as i64)?;
+        lower_chart
+            .configure_mesh()
+            .x_labels(5)
+            .y_labels(10)
+            .x_desc("Pnl")
+            .y_desc("Count")
+            .disable_mesh()
+            .draw()?;
+        lower_chart.draw_series(
+            Histogram::vertical(&lower_chart)
+                .style(RED.mix(0.5).filled())
+                .data(format_pnl.iter().map(|pnl| (*pnl, 1))),
+        )?;
+
         root_area.present()?;
 
         Ok(())
@@ -343,10 +441,13 @@ impl StrategyContext {
                     continue;
                 }
                 println!("symbol: {}", s);
-                if orders.len() % 2 != 0 {
-                    self.win_rate_statistic(&orders[..orders.len() - 1].to_vec());
-                } else {
-                    self.win_rate_statistic(orders);
+                let mut pnl_vec: Vec<f64> = Vec::new();
+                pnl_vec = self.win_rate_statistic(orders);
+                match self.back_test_plot(pnl_vec) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        println!("error: {}", e);
+                    }
                 }
             }
         }
@@ -398,7 +499,7 @@ impl StrategyContext {
         println!("Sortino Ratio: {}", sortino_ratio * sqrt_ratio);
     }
 
-    fn win_rate_statistic(&self, orders: &Vec<Order>) {
+    fn win_rate_statistic(&self, orders: &Vec<Order>) -> Vec<f64> {
         let mut win_count = 0;
         let mut total_count = 0;
         let mut max_win = 0.0;
@@ -408,45 +509,53 @@ impl StrategyContext {
         let mut holding_period_arr: Vec<i64> = Vec::new();
         let mut max_hold_period = 0;
         let mut min_hold_period = 1000000000;
-        for i in (0..orders.len()).step_by(2) {
-            let order1 = &orders[i];
-            let order2 = &orders[i + 1];
-            let pnl = -order1.get_price() * order1.get_qty()
-                - order2.get_price() * order2.get_qty()
-                - order1.get_fee()
-                - order2.get_fee();
-            let cur_holding_period = order2.get_timestamp() - order1.get_timestamp();
-            if cur_holding_period > max_hold_period {
-                max_hold_period = cur_holding_period;
-            }
-            if cur_holding_period < min_hold_period {
-                min_hold_period = cur_holding_period;
-            }
-            holding_period_arr.push(cur_holding_period);
+        let mut pnl_vec: Vec<f64> = Vec::new();
 
-            if pnl > 0.0 {
-                win_count += 1;
-                win_pnl_arr.push(pnl);
-            } else {
-                loss_pnl_arr.push(pnl);
-            }
-            if pnl > max_win {
-                max_win = pnl;
-            }
+        let mut accum_qty = 0.0;
+        let mut tmp_orders: Vec<Order> = Vec::new();
+        for ord in orders.iter() {
+            tmp_orders.push(ord.clone());
+            accum_qty += ord.get_qty();
+            if accum_qty == 0.0 {
+                let cur_pnl = tmp_orders.iter().fold(0.0, |acc, ord| {
+                    acc - ord.get_price() * ord.get_qty() - ord.get_fee()
+                });
+                pnl_vec.push(cur_pnl);
+                let cur_holding_period = tmp_orders[tmp_orders.len() - 1].get_timestamp()
+                    - tmp_orders[0].get_timestamp();
+                if cur_holding_period > max_hold_period {
+                    max_hold_period = cur_holding_period;
+                }
+                if cur_holding_period < min_hold_period {
+                    min_hold_period = cur_holding_period;
+                }
+                holding_period_arr.push(cur_holding_period);
+                if cur_pnl > 0.0 {
+                    win_count += 1;
+                    win_pnl_arr.push(cur_pnl);
+                } else {
+                    loss_pnl_arr.push(cur_pnl);
+                }
+                if cur_pnl > max_win {
+                    max_win = cur_pnl;
+                }
 
-            if pnl < max_loss {
-                max_loss = pnl;
-            }
+                if cur_pnl < max_loss {
+                    max_loss = cur_pnl;
+                }
 
-            total_count += 1;
+                total_count += 1;
+                tmp_orders.clear();
+            }
         }
+
         let avg_win_pnl = win_pnl_arr.iter().sum::<f64>() / win_pnl_arr.len() as f64;
         let avg_loss_pnl = loss_pnl_arr.iter().sum::<f64>() / loss_pnl_arr.len() as f64;
         let avg_holding_period =
             holding_period_arr.iter().sum::<i64>() / holding_period_arr.len() as i64;
 
         fn format_holding_period(holding_period: i64) -> String {
-            let duration = chrono::Duration::seconds(holding_period);
+            let duration = chrono::Duration::seconds(holding_period / 1000);
             let hours = duration.num_hours();
             let minutes = duration.num_minutes() % 60;
             let seconds = duration.num_seconds() % 60;
@@ -465,15 +574,10 @@ impl StrategyContext {
             max_win,
             max_loss
         );
+        pnl_vec
     }
 
     fn back_test_summary(&self) {
-        match self.back_test_plot() {
-            Ok(_) => {}
-            Err(e) => {
-                println!("error: {}", e);
-            }
-        }
         self.back_test_statistic();
         self.ratio_statistic();
     }
