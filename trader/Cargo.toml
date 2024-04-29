@@ -15,3 +15,5 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 chrono = { workspace = true }
 plotters = { workspace = true }
+time = { workspace = true }
+tracing-appender = { workspace = true }

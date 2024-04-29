@@ -1,4 +1,5 @@
-use base_libs::base_strategy::base_strategy::{BaseStrategy, TargetPosition};
+use base_libs::base_strategy::base_strategy::BaseStrategy;
+use base_libs::base_strategy::common_module::TargetPosition;
 use base_libs::base_strategy::portfolio;
 use base_libs::market_data_module::general_data;
 use base_libs::tools::time_tools;
@@ -39,7 +40,7 @@ impl BaseStrategy for TestStrategy {
         &mut self,
         klines: &HashMap<String, general_data::Kline>,
         portfolio: &portfolio::Portfolio,
-    ) -> HashMap<String, TargetPosition> {
+    ) -> Option<HashMap<String, TargetPosition>> {
         let mut res = HashMap::new();
         let last_fast_ema = self.ema_fast.get();
         let last_slow_ema = self.ema_slow.get();
@@ -121,7 +122,11 @@ impl BaseStrategy for TestStrategy {
                 res.insert(self.symbol.clone(), TargetPosition::new(new_pos));
             }
         }
-        res
+        if res.is_empty() {
+            None
+        } else {
+            Some(res)
+        }
     }
 
     fn get_strategy_name(&self) -> String {

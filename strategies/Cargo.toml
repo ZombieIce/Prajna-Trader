@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 base_libs = { path = "../base_libs" }
 quant_libs = { path = "../quant_libs" }
+tracing = { workspace = true }

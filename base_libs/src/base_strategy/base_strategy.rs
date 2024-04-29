@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
-use super::portfolio::Order;
+use super::common_module::TargetPosition;
+use super::order::Order;
+use super::order::OrderParse;
 use super::portfolio::Portfolio;
-use super::strategy_error::StrategyError;
 use crate::kline_basic;
 use crate::market_data_module::general_data;
 use crate::market_data_module::general_data::Kline;
@@ -11,14 +12,8 @@ use crate::mongo_engine::MongoEngine;
 use crate::tools::time_tools;
 use chrono::Duration;
 use plotters::prelude::*;
-
-#[derive(Debug, Clone, Copy)]
-pub struct TargetPosition(f64);
-impl TargetPosition {
-    pub fn new(qty: f64) -> Self {
-        Self(qty)
-    }
-}
+use tracing;
+use tracing::error;
 
 #[derive(Debug, Clone, Copy)]
 pub struct PnlRecord {
@@ -54,7 +49,7 @@ pub trait BaseStrategy {
         &mut self,
         klines: &HashMap<String, general_data::Kline>,
         portfolio: &Portfolio,
-    ) -> HashMap<String, TargetPosition>;
+    ) -> Option<HashMap<String, TargetPosition>>;
 
     fn get_strategy_name(&self) -> String {
         "BaseStrategy".to_string()
@@ -66,21 +61,20 @@ pub struct StrategyContext {
     portfolio: Portfolio,
     kline_data: HashMap<String, Vec<general_data::Kline>>,
     start_date: i64,
-    interval: general_enum::Interval,
-    is_back_test: bool,
     strategy: Box<dyn BaseStrategy>,
     pnl_records: Vec<PnlRecord>,
     symbol_infos: HashMap<String, general_data::SymbolInfo>,
+    real_kline_data: HashMap<String, general_data::Kline>,
+    order_parser: OrderParse,
 }
+unsafe impl Send for StrategyContext {}
 
 impl StrategyContext {
     pub fn new(
         symbols: Vec<String>,
         cash: f64,
         start_date: i64,
-        interval: general_enum::Interval,
         leverage_rate: f64,
-        is_back_test: bool,
         strategy: Box<dyn BaseStrategy>,
     ) -> Self {
         Self {
@@ -88,11 +82,11 @@ impl StrategyContext {
             portfolio: Portfolio::new(cash, leverage_rate, symbols.clone()),
             kline_data: HashMap::new(),
             start_date,
-            interval,
-            is_back_test,
             strategy,
             pnl_records: vec![],
             symbol_infos: HashMap::new(),
+            real_kline_data: HashMap::new(),
+            order_parser: OrderParse::new(HashMap::new()),
         }
     }
 
@@ -103,20 +97,24 @@ impl StrategyContext {
                 self.symbol_infos = exchange_info.get_symbol_info_map(&self.symbols);
             }
             None => {
-                println!("error: fetch exchange info failed");
+                error!("fetch exchange info failed");
             }
         }
     }
 
-    async fn init_data(&mut self) {
+    async fn init_pure_historical_data(&mut self) {
         self.init_symbol_info().await;
+        self.order_parser
+            .set_symbol_infos(self.symbol_infos.clone());
         let mut max_start_date: i64 = 0;
         let mut tmp_kline_data: HashMap<String, Vec<general_data::Kline>> = HashMap::new();
         for symbol in &self.symbols {
-            match kline_basic::fetch_klines(symbol, self.start_date, &self.interval).await {
+            match kline_basic::fetch_klines(symbol, self.start_date, &general_enum::Interval::Min5)
+                .await
+            {
                 Some(klines) => {
                     if klines.len() == 0 {
-                        println!("error: fetch kliens {symbol} failed");
+                        error!("error: fetch kliens {symbol} failed");
                         return;
                     }
                     if klines[0].get_open_time() > max_start_date {
@@ -125,7 +123,7 @@ impl StrategyContext {
                     tmp_kline_data.insert(symbol.clone(), klines);
                 }
                 None => {
-                    println!("error: fetch klines {symbol} failed");
+                    error!("error: fetch kliens {symbol} failed");
                 }
             }
         }
@@ -155,7 +153,7 @@ impl StrategyContext {
         res
     }
 
-    fn format_his_price(&self, klines: &HashMap<String, Kline>) -> HashMap<String, f64> {
+    fn get_format_close(&self, klines: &HashMap<String, Kline>) -> HashMap<String, f64> {
         let mut res: HashMap<String, f64> = HashMap::new();
         for (symbol, kline) in klines.iter() {
             res.insert(symbol.clone(), kline.get_close());
@@ -163,122 +161,46 @@ impl StrategyContext {
         res
     }
 
-    pub async fn start(&mut self) {
-        self.init_data().await;
-        if self.is_back_test {
-            self.back_test();
-        } else {
-            self.real_trade().await;
-        }
-    }
-
-    fn convert_orders(
-        &self,
-        orders: &HashMap<String, TargetPosition>,
-        klines: &HashMap<String, Kline>,
-    ) -> Result<HashMap<String, Order>, StrategyError> {
-        let mut res: HashMap<String, Order> = HashMap::new();
-        for (symbol, target_position) in orders.iter() {
-            let target_position = target_position.0;
-            let price = klines.get(symbol).unwrap().get_close();
-            let timestamp = klines.get(symbol).unwrap().get_open_time();
-            let symbol_info = self.symbol_infos.get(symbol).unwrap();
-
-            if let Some(current_position) = self.portfolio.get_position(&symbol) {
-                let mut order = Order::new(
-                    timestamp,
-                    price,
-                    target_position - current_position.get_qty(),
-                );
-                order.format_order(
-                    symbol_info.get_price_precision(),
-                    symbol_info.get_quantity_precision(),
-                );
-                if order.get_qty().abs() <= symbol_info.get_min_quantity() {
-                    return Err(StrategyError::OrderQuantityError(format!(
-                        "order quantity {} is too small with min_qty: {}",
-                        order.get_qty(),
-                        symbol_info.get_min_quantity()
-                    )));
-                }
-                if order.get_qty().abs() * order.get_price() < symbol_info.get_min_notional() {
-                    return Err(StrategyError::OrderNotionalError(format!(
-                        "order notional {} is too small with min_notional: {}",
-                        order.get_qty() * order.get_price(),
-                        symbol_info.get_min_notional()
-                    )));
-                }
-
-                res.insert(symbol.clone(), order);
-            } else {
-                let mut order = Order::new(timestamp, price, target_position);
-                order.format_order(
-                    symbol_info.get_price_precision(),
-                    symbol_info.get_quantity_precision(),
-                );
-                if order.get_qty() <= symbol_info.get_min_quantity() {
-                    continue;
-                }
-                res.insert(symbol.clone(), order);
-            }
-        }
-        Ok(res)
-    }
-
-    fn conver_backtest_order(
-        &self,
-        orders: &HashMap<String, Order>,
-        klines: &HashMap<String, Kline>,
-    ) -> HashMap<String, Order> {
-        let mut res: HashMap<String, Order> = HashMap::new();
-        for (symbol, order) in orders.iter() {
-            let price = klines.get(symbol).unwrap().get_open();
-            let timestamp = klines.get(symbol).unwrap().get_open_time();
-            let order = Order::new(timestamp, price, order.get_qty());
-            println!(
-                "MAKE ORDER datetime: {}, symbol: {}, price: {}, qty: {}",
-                time_tools::get_datetime_from_timestamp(timestamp),
-                symbol,
-                price,
-                order.get_qty()
-            );
-            res.insert(symbol.clone(), order);
-        }
-        res
+    pub async fn start_backtest(&mut self) {
+        self.init_pure_historical_data().await;
+        self.back_test();
     }
 
     pub fn back_test(&mut self) {
         let format_klines = self.format_his_klines();
-        let mut tmp_orders = HashMap::new();
+        let mut tmp_orders: HashMap<String, TargetPosition> = HashMap::new();
 
         for klines in format_klines {
-            if tmp_orders.len() > 0 {
-                self.conver_backtest_order(&tmp_orders, &klines);
-                match self.portfolio.make_orders(&mut tmp_orders) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        println!("error: {}", e);
-                    }
-                }
-                println!()
-            }
-
-            let orders = self.strategy.on_schedule(&klines, &self.portfolio);
-            if orders.len() > 0 {
-                match self.convert_orders(&orders, &klines) {
+            if tmp_orders.len() != 0 {
+                match self.order_parser.convert_backetst_order(
+                    &tmp_orders,
+                    &klines,
+                    &self.portfolio,
+                ) {
                     Ok(orders) => {
-                        tmp_orders = orders;
+                        let mut orders = orders;
+                        match self.portfolio.make_orders(&mut orders) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!("error: {}", e);
+                                break;
+                            }
+                        }
                     }
                     Err(e) => {
-                        println!("error: {}", e);
+                        error!("error: {}", e);
                         break;
                     }
                 }
+            }
+
+            if let Some(orders) = self.strategy.on_schedule(&klines, &self.portfolio) {
+                tmp_orders = orders;
             } else {
                 tmp_orders.clear();
             }
             self.portfolio
-                .update_market_price(self.format_his_price(&klines));
+                .update_market_price(self.get_format_close(&klines));
             self.pnl_records.push(PnlRecord::new(
                 klines.get(&self.symbols[0]).unwrap().get_open_time(),
                 self.portfolio.get_pnl(),
@@ -483,16 +405,7 @@ impl StrategyContext {
         }
         let downside_std_dev = (squared_downside_diff_sum / downside_returns.len() as f64).sqrt();
         let sortino_ratio = (mean_return - risk_free_rate) / downside_std_dev;
-        let sqrt_ratio = match self.interval {
-            general_enum::Interval::Min5 => 288.0_f64.sqrt(),
-            general_enum::Interval::Min10 => 144.0_f64.sqrt(),
-            general_enum::Interval::Min15 => 96.0_f64.sqrt(),
-            general_enum::Interval::Min30 => 48.0_f64.sqrt(),
-            general_enum::Interval::Hour1 => 24.0_f64.sqrt(),
-            general_enum::Interval::Hour2 => 12.0_f64.sqrt(),
-            general_enum::Interval::Hour4 => 6.0_f64.sqrt(),
-            general_enum::Interval::Day => 1.0_f64.sqrt(),
-        };
+        let sqrt_ratio = 288.0_f64.sqrt();
 
         println!("Sharpe Ratio: {}", sharpe_ratio * sqrt_ratio);
         println!("Sortino Ratio: {}", sortino_ratio * sqrt_ratio);
@@ -581,8 +494,111 @@ impl StrategyContext {
         self.ratio_statistic();
     }
 
-    pub async fn real_trade(&self) {
+    pub async fn real_trade(&mut self, data: general_data::MarketData) {
+        if let Some(kline) = data.get_kline() {
+            if self.symbols.contains(data.get_symbol()) {
+                let kline = kline.clone();
+                let symbol = data.get_symbol().to_string();
+                self.real_kline_data.insert(symbol, kline);
+                if self.real_kline_data.len() == self.symbols.len() {
+                    let _ = self
+                        .strategy
+                        .on_schedule(&self.real_kline_data, &self.portfolio);
+                    self.real_kline_data.clear();
+                }
+            }
+        }
         // todo!("real trade");
+    }
+
+    pub async fn paper_trade(&mut self, data: general_data::MarketData) {
+        if let Some(kline) = data.get_kline() {
+            if self.symbols.contains(data.get_symbol()) {
+                let kline = kline.clone();
+                let symbol = data.get_symbol().to_string();
+                self.real_kline_data.insert(symbol, kline);
+                if self.real_kline_data.len() == self.symbols.len() {
+                    if let Some(orders) = self
+                        .strategy
+                        .on_schedule(&self.real_kline_data, &self.portfolio)
+                    {
+                        match self.order_parser.convert_paper_order(
+                            &orders,
+                            &self.real_kline_data,
+                            &self.portfolio,
+                        ) {
+                            Ok(orders) => {
+                                let mut orders = orders;
+                                match self.portfolio.make_orders(&mut orders) {
+                                    Ok(_) => {}
+                                    Err(e) => {
+                                        error!("error: {}", e);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                error!("error: {}", e);
+                            }
+                        }
+                    }
+
+                    self.portfolio
+                        .update_market_price(self.get_format_close(&self.real_kline_data));
+                    self.pnl_records.push(PnlRecord::new(
+                        self.real_kline_data
+                            .get(&self.symbols[0])
+                            .unwrap()
+                            .get_open_time(),
+                        self.portfolio.get_pnl(),
+                        self.portfolio.get_total_value() / self.portfolio.get_starting_cash(),
+                    ));
+                }
+            }
+        }
+    }
+
+    pub async fn init_trade(&mut self) {
+        self.init_pure_historical_data().await;
+        let format_klines = self.format_his_klines();
+        let mut tmp_orders = HashMap::new();
+
+        for klines in format_klines {
+            if tmp_orders.len() != 0 {
+                match self.order_parser.convert_backetst_order(
+                    &tmp_orders,
+                    &klines,
+                    &self.portfolio,
+                ) {
+                    Ok(orders) => {
+                        let mut orders = orders;
+                        match self.portfolio.make_orders(&mut orders) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!("error: {}", e);
+                                break;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("error: {}", e);
+                        break;
+                    }
+                }
+            }
+
+            if let Some(orders) = self.strategy.on_schedule(&klines, &self.portfolio) {
+                tmp_orders = orders;
+            } else {
+                tmp_orders.clear();
+            }
+            self.portfolio
+                .update_market_price(self.get_format_close(&klines));
+            self.pnl_records.push(PnlRecord::new(
+                klines.get(&self.symbols[0]).unwrap().get_open_time(),
+                self.portfolio.get_pnl(),
+                self.portfolio.get_total_value() / self.portfolio.get_starting_cash(),
+            ));
+        }
     }
 
     pub fn get_kline(&self, symbol: &str) -> Option<&Vec<general_data::Kline>> {

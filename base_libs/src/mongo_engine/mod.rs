@@ -62,10 +62,15 @@ impl MongoEngine {
                 let db = client.database(&self.database);
                 let collection: Collection<general_data::ExchangeInfo> =
                     db.collection("exchange_info");
-                let result = collection.find_one(None, None).await.unwrap();
-                match result {
-                    Some(exchange_info) => Some(exchange_info),
-                    None => None,
+                match collection.find_one(None, None).await {
+                    Ok(result) => match result {
+                        Some(exchange_info) => Some(exchange_info),
+                        None => None,
+                    },
+                    Err(e) => {
+                        println!("get_exchange Error: {}", e);
+                        None
+                    },
                 }
             }
             Err(_) => None,

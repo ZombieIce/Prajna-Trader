@@ -1,65 +1,6 @@
-use crate::tools::math_tools;
-
-use super::strategy_error::StrategyError;
+use super::{order::Order, strategy_error::StrategyError};
 use std::collections::HashMap;
-
-#[derive(Debug, Clone)]
-pub struct Order {
-    timestamp: i64,
-    price: f64,
-    qty: f64,
-    fee: f64,
-}
-
-impl Order {
-    pub fn new(timestamp: i64, price: f64, qty: f64) -> Self {
-        Self {
-            timestamp,
-            price,
-            qty,
-            fee: 0.0,
-        }
-    }
-
-    pub fn get_timestamp(&self) -> i64 {
-        self.timestamp
-    }
-
-    pub fn get_price(&self) -> f64 {
-        self.price
-    }
-
-    pub fn get_qty(&self) -> f64 {
-        self.qty
-    }
-
-    pub fn set_price(&mut self, price: f64) {
-        self.price = price;
-    }
-
-    pub fn set_qty(&mut self, qty: f64) {
-        self.qty = qty;
-    }
-
-    pub fn set_fee(&mut self, fee: f64) {
-        self.fee = fee;
-    }
-
-    pub fn get_fee(&self) -> f64 {
-        self.fee
-    }
-
-    pub fn format_order(&mut self, px_precision: i64, qty_precision: i64) {
-        self.set_price(math_tools::round_to_precision(
-            self.get_price(),
-            px_precision,
-        ));
-        self.set_qty(math_tools::round_to_precision(
-            self.get_qty(),
-            qty_precision,
-        ));
-    }
-}
+use tracing::info;
 
 #[derive(Debug)]
 pub struct Portfolio {
@@ -107,7 +48,8 @@ impl Portfolio {
                 .abs()
                 < epsilon,
             "total_value is not equal to realized_pnl"
-        )
+        );
+        info!("total_value: {}", self.total_value);
     }
 
     pub fn update_market_price(&mut self, market_price: HashMap<String, f64>) {
@@ -145,6 +87,15 @@ impl Portfolio {
                         "Insufficient cash to make order".to_string(),
                     ));
                 } else {
+                    order.set_fee(cur_fee);
+                    info!(
+                        "{} MAKE ORDER at px: {}, qty: {}, fee: {}",
+                        symbol,
+                        order.get_price(),
+                        order.get_qty(),
+                        cur_fee
+                    );
+
                     self.available_cash -= cur_fee + new_margin - prev_margin;
                     self.freezed_cash += new_margin - prev_margin;
                     order.set_fee(cur_fee);

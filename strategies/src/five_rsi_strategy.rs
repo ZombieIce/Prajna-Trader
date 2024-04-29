@@ -1,4 +1,5 @@
-use base_libs::base_strategy::base_strategy::{BaseStrategy, TargetPosition};
+use base_libs::base_strategy::base_strategy::BaseStrategy;
+use base_libs::base_strategy::common_module::TargetPosition;
 use base_libs::base_strategy::portfolio;
 use base_libs::market_data_module::general_data;
 use base_libs::tools::time_tools;
@@ -45,9 +46,9 @@ impl BaseStrategy for FiveRsiStrategy {
         &mut self,
         klines: &HashMap<String, general_data::Kline>,
         portfolio: &portfolio::Portfolio,
-    ) -> HashMap<String, TargetPosition> {
+    ) -> Option<HashMap<String, TargetPosition>> {
         let kline = klines.get(&self.symbol).unwrap();
-        let cur_time = time_tools::get_datetime_from_timestamp(kline.get_open_time()).to_string();
+        let cur_time = time_tools::get_datetime_from_timestamp(kline.get_close_time()).to_string();
         self.rsi.add(kline.get_close());
         self.rsi_ma.add(self.rsi.get());
         self.high_ema.add(kline.get_high());
@@ -58,6 +59,16 @@ impl BaseStrategy for FiveRsiStrategy {
             self.rsi_ma_vec.remove(0);
         }
         let mut res = HashMap::new();
+
+        println!(
+            "{}:, rsi: {}, rsi_ma: {}, high_ema: {}, close_ema: {}, low_ema: {}",
+            cur_time,
+            self.rsi.get(),
+            self.rsi_ma.get(),
+            self.high_ema.get(),
+            self.close_ema.get(),
+            self.low_ema.get()
+        );
 
         if let Some(current_position) = portfolio.get_position(&self.symbol) {
             let mut new_pos = current_position.get_qty();
@@ -129,7 +140,10 @@ impl BaseStrategy for FiveRsiStrategy {
             }
         }
         self.last_kline = Some(kline.clone());
-        res
+        if res.len() > 0 {
+            return Some(res);
+        }
+        None
     }
 
     fn get_strategy_name(&self) -> String {

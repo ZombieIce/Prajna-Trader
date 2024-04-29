@@ -27,7 +27,7 @@ pub enum Interval {
 impl Interval {
     pub fn get_divider(&self) -> usize {
         match self {
-            Interval::Min5 => 0,
+            Interval::Min5 => 1,
             Interval::Min10 => 2,
             Interval::Min15 => 3,
             Interval::Min30 => 6,

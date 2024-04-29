@@ -4,6 +4,49 @@ use serde::{Deserialize, Serialize};
 
 use super::general_enum;
 
+pub struct CombineKline {
+    klines: Vec<Kline>,
+    interval: general_enum::Interval,
+}
+
+impl Default for CombineKline {
+    fn default() -> Self {
+        CombineKline {
+            klines: vec![],
+            interval: general_enum::Interval::Min5,
+        }
+    }
+}
+
+impl CombineKline {
+    pub fn new(klines: Vec<Kline>, interval: general_enum::Interval) -> Self {
+        CombineKline { klines, interval }
+    }
+
+    pub fn set_interval(&mut self, interval: general_enum::Interval) {
+        self.interval = interval;
+    }
+
+    pub fn add(&mut self, kline: Kline) {
+        self.klines.push(kline);
+        if self.klines.len() > self.interval.get_divider() {
+            self.klines.remove(0);
+        }
+    }
+
+    pub fn get_kline(&mut self) -> Option<Kline> {
+        if self.klines.len() == self.interval.get_divider() {
+            let mut res = self.klines[0];
+            for i in 1..self.klines.len() {
+                res = res.combine(&self.klines[i]);
+            }
+            self.klines.clear();
+            return Some(res);
+        }
+        None
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct Kline {
     open_time: i64,
@@ -16,6 +59,23 @@ pub struct Kline {
     number_of_trades: i64,
     active_buy_asset_volume: f64,
     active_buy_quote_volume: f64,
+}
+
+impl Default for Kline {
+    fn default() -> Self {
+        Kline {
+            open_time: 0,
+            close_time: 0,
+            open: 0.0,
+            high: 0.0,
+            low: 0.0,
+            close: 0.0,
+            volume: 0.0,
+            number_of_trades: 0,
+            active_buy_asset_volume: 0.0,
+            active_buy_quote_volume: 0.0,
+        }
+    }
 }
 
 impl Kline {
@@ -121,7 +181,7 @@ impl PriceLevel {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Depth {
     asks: Vec<PriceLevel>,
     bids: Vec<PriceLevel>,
@@ -263,5 +323,41 @@ impl ExchangeInfo {
             }
         }
         res
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum MarketDataType {
+    Kline(Kline),
+    Depth(Depth),
+}
+
+#[derive(Debug, Clone)]
+pub struct MarketData {
+    symbol: String,
+    data: MarketDataType,
+}
+
+impl MarketData {
+    pub fn new(symbol: String, data: MarketDataType) -> Self {
+        MarketData { symbol, data }
+    }
+
+    pub fn get_symbol(&self) -> &String {
+        &self.symbol
+    }
+
+    pub fn get_kline(&self) -> Option<Kline> {
+        match &self.data {
+            MarketDataType::Kline(kline) => Some(*kline),
+            _ => None,
+        }
+    }
+
+    pub fn get_depth(&self) -> Option<Depth> {
+        match &self.data {
+            MarketDataType::Depth(depth) => Some(depth.clone()),
+            _ => None,
+        }
     }
 }
