@@ -1,8 +1,11 @@
-use base_libs::base_strategy::base_strategy::BaseStrategy;
-use base_libs::base_strategy::common_module::TargetPosition;
-use base_libs::base_strategy::portfolio;
-use base_libs::market_data_module::general_data;
-use base_libs::tools::time_tools;
+use public::base_enum::order_enums::OrderSide;
+use public::base_model::market_model::kline_model::Kline;
+use public::base_model::trade_model::order_model::Order;
+use public::strategy_model::strategy_portfolio::StrategyPortfolio;
+use public::tools::time_tools;
+use tracing::info;
+use trade_engine::BaseStrategy;
+
 use quant_libs::tech_analysis::ma;
 use std::collections::HashMap;
 
@@ -38,9 +41,9 @@ impl TestStrategy {
 impl BaseStrategy for TestStrategy {
     fn on_schedule(
         &mut self,
-        klines: &HashMap<String, general_data::Kline>,
-        portfolio: &portfolio::Portfolio,
-    ) -> Option<HashMap<String, TargetPosition>> {
+        klines: &HashMap<String, Kline>,
+        portfolio: &StrategyPortfolio,
+    ) -> Option<HashMap<String, Order>> {
         let mut res = HashMap::new();
         let last_fast_ema = self.ema_fast.get();
         let last_slow_ema = self.ema_slow.get();
@@ -53,40 +56,48 @@ impl BaseStrategy for TestStrategy {
         let cur_time = time_tools::get_datetime_from_timestamp(kline.get_open_time()).to_string();
 
         if let Some(current_position) = portfolio.get_position(&self.symbol) {
-            let mut new_pos = current_position.get_qty();
-            if (current_position.get_qty() > 0.0 && kline.get_close() < self.sma_slow.get())
-                || (current_position.get_qty() < 0.0 && kline.get_close() > self.sma_slow.get())
+            let mut new_pos = 0.0;
+            let mut new_side = current_position.get_side();
+            if current_position.get_quantity() != 0.0
+                && kline.get_close() < self.sma_slow.get()
+                && current_position.get_side() == OrderSide::BUY
             {
-                new_pos = 0.0;
+                new_pos = current_position.get_quantity();
+                new_side = OrderSide::SELL;
                 let close_info = format!(
-                    "datetime: {}, sma_slow: {}, close: {}",
+                    "datetime: {}, sma_slow: {}, close: {}, CLOSE LONG POSITION: {}, SELL!!!!",
                     cur_time,
                     self.sma_slow.get(),
-                    kline.get_close()
+                    kline.get_close(),
+                    new_pos,
                 );
-
-                if current_position.get_qty() > 0.0 {
-                    println!(
-                        "{} CLOSE LONG POSITION: {}, SELL!!!!",
-                        close_info,
-                        current_position.get_qty()
-                    );
-                } else {
-                    println!(
-                        "{} CLOSE SHORT POSITION: {}, BUY!!!!",
-                        close_info,
-                        current_position.get_qty()
-                    );
-                }
+                info!("{}", close_info);
             }
-            if current_position.get_qty() == 0.0 {
+
+            if current_position.get_quantity() != 0.0
+                && kline.get_close() > self.sma_slow.get()
+                && current_position.get_side() == OrderSide::SELL
+            {
+                new_pos = current_position.get_quantity();
+                new_side = OrderSide::BUY;
+                let close_info = format!(
+                    "datetime: {}, sma_slow: {}, close: {}, CLOSE SHORT POSITION: {}, BUY!!!!",
+                    cur_time,
+                    self.sma_slow.get(),
+                    kline.get_close(),
+                    new_pos,
+                );
+                info!("{}", close_info);
+            }
+
+            if current_position.get_quantity() == 0.0 {
                 if self.sma_fast.get() > self.sma_slow.get()
                     && last_fast_ema < last_slow_ema
                     && self.ema_fast.get() > self.ema_slow.get()
                     && self.sma_slow.get() != 0.0
                 {
                     let available_cash = portfolio.get_available_cash();
-                    println!(
+                    let msg = format!(
                         "datetime: {}, sma_slow: {}, sma_fast: {}, ema_fast: {}, ema_slow: {}, last_fast_ema: {}, last_slow_ema: {}, BUY!!!!",
                         cur_time,
                         self.sma_slow.get(),
@@ -96,7 +107,9 @@ impl BaseStrategy for TestStrategy {
                         last_fast_ema,
                         last_slow_ema
                     );
-                    new_pos += available_cash / kline.get_close();
+                    info!("{}", msg);
+                    new_pos = available_cash * 0.9 / kline.get_close() * portfolio.get_leverage_rate();
+                    new_side = OrderSide::BUY;
                 } else if self.sma_fast.get() < self.sma_slow.get()
                     && last_fast_ema > last_slow_ema
                     && self.ema_fast.get() < self.ema_slow.get()
@@ -104,7 +117,7 @@ impl BaseStrategy for TestStrategy {
                     && self.sma_fast.get() != 0.0
                 {
                     let available_cash = portfolio.get_available_cash();
-                    println!(
+                    let msg = format!(
                         "datetime: {}, sma_slow: {}, sma_fast: {}, ema_fast: {}, ema_slow: {}, last_fast_ema: {}, last_slow_ema: {}, SELL!!!!",
                         cur_time,
                         self.sma_slow.get(),
@@ -114,22 +127,78 @@ impl BaseStrategy for TestStrategy {
                         last_fast_ema,
                         last_slow_ema
                     );
-                    new_pos -= available_cash / kline.get_close();
+                    info!("{}", msg);
+                    new_pos = available_cash * 0.9 / kline.get_close() * portfolio.get_leverage_rate();
+                    new_side = OrderSide::SELL;
                 }
             }
 
-            if new_pos != current_position.get_qty() {
-                res.insert(self.symbol.clone(), TargetPosition::new(new_pos));
+            if new_pos != 0.0 {
+                let mut order = Order::default();
+                order.set_price(kline.get_close());
+                order.set_qty(new_pos);
+                order.set_symbol(&self.symbol);
+                order.set_side(new_side);
+                res.insert(self.symbol.clone(), order);
             }
         }
+
         if res.is_empty() {
             None
         } else {
+            for (s, order) in res.iter() {
+                let msg = format!(
+                    "datetime: {}, symbol: {}, side: {}, price: {}, qty: {}",
+                    cur_time,
+                    s,
+                    order.get_side().string(),
+                    order.get_price(),
+                    order.get_qty()
+                );
+                info!("{}", msg);
+            }
             Some(res)
         }
     }
 
     fn get_strategy_name(&self) -> String {
         self.strategy_name.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::vec;
+
+    use super::*;
+    use base_libs::tools::time_tools;
+    use trade_engine::StrategyEngine;
+    
+    #[tokio::test]
+    async fn test_test_strategy() {
+        tracing_subscriber::fmt::init();
+        
+
+        let strategy = TestStrategy::new(
+            "test_strategy".to_string(),
+            "btcusdt".to_string(),
+            5,
+            10,
+            5,
+            10,
+        );
+        let symbols = vec!["btcusdt".to_string()];
+        let start_date = time_tools::get_datetime_from_str("2024-07-10 00:00:00");
+        let start_timestamp = time_tools::get_timestamp_from_datetime(start_date);
+        let mut trade_engine = StrategyEngine::new(
+            symbols.clone(),
+            StrategyPortfolio::new(10000.0, 50.0, symbols.clone()),
+            HashMap::new(),
+            start_timestamp,
+            Box::new(strategy),
+            true,
+        );
+        trade_engine.run().await;
+        
     }
 }

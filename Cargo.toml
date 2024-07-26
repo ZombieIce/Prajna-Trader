@@ -1,17 +1,18 @@
 [workspace]
 resolver = "2"
-members = ["base_libs", "services", "trader", "quant_libs", "strategies"]
+members = ["base_libs", "services", "trader", "quant_libs", "strategies", "execute_service", "public", "trade_engine"]
 
 [workspace.dependencies]
-tokio = { version = "1.37.0", features = ["full"] }
+tokio = { version = "1.37.0", features = ["full", "macros", "rt-multi-thread"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["time"] }
 serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.115"
 reqwest = { version = "0.12.2", features = ["json"] }
 chrono = "0.4.38"
-polars = { version = "0.39.2", features = ["dtype-full"] }
+polars = { version = "0.41.3", features = ["dtype-full"] }
 futures-util = "0.3.30"
 plotters = "0.3.5"
 time = { version = "0.3.36", features = ["macros"] }
 tracing-appender = "0.2.3"
+mongodb = "3.0.1"

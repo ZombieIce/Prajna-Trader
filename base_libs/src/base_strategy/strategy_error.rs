@@ -8,6 +8,7 @@ pub enum StrategyError {
     InsufficientCashError(String),
     OrderQuantityError(String),
     OrderNotionalError(String),
+    PlaceOrderError(String),
 }
 
 impl fmt::Display for StrategyError {
@@ -16,6 +17,7 @@ impl fmt::Display for StrategyError {
             StrategyError::InsufficientCashError(msg) => write!(f, "InsufficientCash: {}", msg),
             StrategyError::OrderQuantityError(msg) => write!(f, "OrderQuantityError: {}", msg),
             StrategyError::OrderNotionalError(msg) => write!(f, "OrderNotionalError: {}", msg),
+            StrategyError::PlaceOrderError(msg) => write!(f, "PlaceOrderError: {}", msg),
         }
     }
 }
@@ -26,6 +28,7 @@ impl Error for StrategyError {
             StrategyError::InsufficientCashError(msg) => msg,
             StrategyError::OrderQuantityError(msg) => msg,
             StrategyError::OrderNotionalError(msg) => msg,
+            StrategyError::PlaceOrderError(msg) => msg,
         }
     }
 }

@@ -1,0 +1,33 @@
+syntax = "proto3";
+package order_service;
+
+service OrderService {
+  rpc MakeOrder(MakeOrderRequest) returns (MakeOrderReply);
+  rpc CancelOrder(CancelOrderRequest) returns (MakeOrderReply);
+  rpc StopLossOrder(MakeOrderRequest) returns (MakeOrderReply);
+  rpc TakeProfitOrder(MakeOrderRequest) returns (MakeOrderReply);
+}
+
+message MakeOrderRequest {
+  string symbol = 1;
+  string side = 2;
+  double price = 3;
+  double quantity = 4;
+  string strategy = 5;
+}
+
+
+message MakeOrderReply {
+  string symbol = 1;
+  string side = 2;
+  double price = 3;
+  double quantity = 4;
+  string strategy = 5;
+  string order_cid = 6;
+  string status = 7;
+}
+
+message CancelOrderRequest {
+  string symbol = 1;
+  string order_cid = 2;
+}

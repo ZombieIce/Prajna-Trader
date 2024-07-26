@@ -1,0 +1,9 @@
+[package]
+name = "trade_engine"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+public = { path = "../public" }
+services = { path = "../services" }
+tracing = { workspace = true }

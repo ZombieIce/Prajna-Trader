@@ -361,3 +361,196 @@ impl MarketData {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct Order {
+    symbol: String,
+    price: f64,
+    quantity: f64,
+    side: general_enum::OrderSide,
+    avg_price: f64,
+    filled_qty: f64,
+    order_type: general_enum::OrderType,
+    cid: String,
+    oid: String,
+    timestamp: i64,
+    status: general_enum::OrderStatus,
+}
+
+impl Default for Order {
+    fn default() -> Self {
+        Self {
+            symbol: "".to_string(),
+            price: 0.0,
+            quantity: 0.0,
+            side: general_enum::OrderSide::BUY,
+            avg_price: 0.0,
+            filled_qty: 0.0,
+            order_type: general_enum::OrderType::Limit,
+            cid: "".to_string(),
+            oid: "".to_string(),
+            status: general_enum::OrderStatus::New,
+            timestamp: 0,
+        }
+    }
+}
+
+impl Order {
+    pub fn new(
+        symbol: &str,
+        price: f64,
+        quantity: f64,
+        side: general_enum::OrderSide,
+        order_type: general_enum::OrderType,
+        avg_price: f64,
+        filled_qty: f64,
+        cid: &str,
+        oid: &str,
+        status: general_enum::OrderStatus,
+        timestamp: i64,
+    ) -> Self {
+        Self {
+            symbol: symbol.to_string(),
+            price,
+            quantity,
+            side,
+            avg_price: avg_price,
+            filled_qty: filled_qty,
+            order_type,
+            cid: cid.to_string(),
+            oid: oid.to_string(),
+            status,
+            timestamp,
+        }
+    }
+
+    pub fn get_symbol(&self) -> &str {
+        &self.symbol
+    }
+
+    pub fn get_price(&self) -> f64 {
+        self.price
+    }
+
+    pub fn get_quantity(&self) -> f64 {
+        self.quantity
+    }
+
+    pub fn get_side(&self) -> &general_enum::OrderSide {
+        &self.side
+    }
+
+    pub fn get_avg_price(&self) -> f64 {
+        self.avg_price
+    }
+
+    pub fn get_filled_qty(&self) -> f64 {
+        self.filled_qty
+    }
+
+    pub fn get_order_type(&self) -> &general_enum::OrderType {
+        &self.order_type
+    }
+
+    pub fn get_cid(&self) -> &str {
+        &self.cid
+    }
+
+    pub fn get_oid(&self) -> &str {
+        &self.oid
+    }
+
+    pub fn get_timestamp(&self) -> i64 {
+        self.timestamp
+    }
+
+    pub fn get_status(&self) -> &general_enum::OrderStatus {
+        &self.status
+    }
+
+    pub fn set_avg_price(&mut self, avg_price: f64) {
+        self.avg_price = avg_price;
+    }
+
+    pub fn set_filled_qty(&mut self, filled_qty: f64) {
+        self.filled_qty = filled_qty;
+    }
+    pub fn set_status(&mut self, status: general_enum::OrderStatus) {
+        self.status = status;
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Position {
+    symbol: String,
+    price: f64,
+    quantity: f64,
+    break_even_price: f64,
+    unrealized_pnl: f64,
+    margin: f64,
+    timestamp: i64,
+}
+
+impl Default for Position {
+    fn default() -> Self {
+        Self {
+            symbol: "".to_string(),
+            price: 0.0,
+            quantity: 0.0,
+            break_even_price: 0.0,
+            unrealized_pnl: 0.0,
+            margin: 0.0,
+            timestamp: 0,
+        }
+    }
+}
+
+impl Position {
+    pub fn new(
+        symbol: &str,
+        price: f64,
+        quantity: f64,
+        break_even_price: f64,
+        unrealized_pnl: f64,
+        margin: f64,
+        timestamp: i64,
+    ) -> Self {
+        Self {
+            symbol: symbol.to_string(),
+            price,
+            quantity,
+            break_even_price,
+            unrealized_pnl,
+            margin,
+            timestamp,
+        }
+    }
+
+    pub fn get_symbol(&self) -> &str {
+        &self.symbol
+    }
+
+    pub fn get_quantity(&self) -> f64 {
+        self.quantity
+    }
+
+    pub fn get_price(&self) -> f64 {
+        self.price
+    }
+
+    pub fn get_break_even_price(&self) -> f64 {
+        self.break_even_price
+    }
+
+    pub fn get_unrealized_pnl(&self) -> f64 {
+        self.unrealized_pnl
+    }
+
+    pub fn get_margin(&self) -> f64 {
+        self.margin
+    }
+
+    pub fn get_timestamp(&self) -> i64 {
+        self.timestamp
+    }
+}

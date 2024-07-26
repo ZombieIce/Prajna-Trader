@@ -17,6 +17,14 @@ pub fn get_now_string() -> String {
     now.format("%Y-%m-%d %H:%M:%S").to_string()
 }
 
+pub fn get_now_timestamp() -> i64 {
+    Local::now().timestamp_millis()
+}
+
+pub fn get_timestamp_from_datetime(datetime: DateTime<Local>) -> i64 {
+    datetime.timestamp_millis()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

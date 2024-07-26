@@ -1,6 +1,6 @@
 use super::rest_data_engine::RestDataEngine;
 use super::ws_data_engine::WsDataEngine;
-use base_libs::market_data_module::general_data::MarketData;
+use public::base_model::api_model::MarketData;
 use tokio::sync::broadcast::Sender;
 
 pub struct MarketDataEngine {
@@ -29,7 +29,6 @@ impl MarketDataEngine {
     pub async fn start(&mut self, tx: Sender<MarketData>) {
         self.rest_data_engine.update_exchange_info().await;
         self.rest_data_engine.start().await;
-        // self.ws_data_engine.start().await;
         self.ws_data_engine.start_watch_send(tx).await;
     }
 }

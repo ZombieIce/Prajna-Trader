@@ -39,7 +39,92 @@ impl Interval {
     }
 }
 
-pub enum Side {
+#[derive(Debug, Clone)]
+pub enum OrderSide {
     BUY,
     SELL,
+}
+
+impl OrderSide {
+    pub fn get_side(&self) -> String {
+        match self {
+            OrderSide::BUY => "BUY".to_string(),
+            OrderSide::SELL => "SELL".to_string(),
+        }
+    }
+
+    pub fn parse_order_side(order_side: &str) -> OrderSide {
+        match order_side {
+            "BUY" => OrderSide::BUY,
+            "SELL" => OrderSide::SELL,
+            _ => panic!("Invalid order side"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum OrderType {
+    Limit,
+    Market,
+    TakeProfitMarket,
+    StopMarket,
+    Stop,
+    TakeProfit,
+    Liquidation,
+    TrailingStopMarket,
+}
+
+impl OrderType {
+    pub fn get_order_type(&self) -> String {
+        match self {
+            OrderType::Limit => "LIMIT".to_string(),
+            OrderType::Market => "MARKET".to_string(),
+            OrderType::TakeProfitMarket => "TAKE_PROFIT_MARKET".to_string(),
+            OrderType::StopMarket => "STOP_MARKET".to_string(),
+            OrderType::Stop => "STOP".to_string(),
+            OrderType::TakeProfit => "TAKE_PROFIT".to_string(),
+            OrderType::Liquidation => "LIQUIDATION".to_string(),
+            OrderType::TrailingStopMarket => "TRAILING_STOP_MARKET".to_string(),
+        }
+    }
+
+    pub fn parse_order_type(order_type: &str) -> OrderType {
+        match order_type {
+            "LIMIT" => OrderType::Limit,
+            "MARKET" => OrderType::Market,
+            "TAKE_PROFIT_MARKET" => OrderType::TakeProfitMarket,
+            "STOP_MARKET" => OrderType::StopMarket,
+            "STOP" => OrderType::Stop,
+            "TAKE_PROFIT" => OrderType::TakeProfit,
+            "LIQUIDATION" => OrderType::Liquidation,
+            "TRAILING_STOP_MARKET" => OrderType::TrailingStopMarket,
+            _ => panic!("Invalid order type"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum OrderStatus {
+    New,
+    PartiallyFilled,
+    Filled,
+    Cancled,
+    Rejected,
+    Expired,
+    ExpiredInMatch,
+}
+
+impl OrderStatus {
+    pub fn parse_order_status(order_status: &str) -> OrderStatus {
+        match order_status {
+            "NEW" => OrderStatus::New,
+            "PARTIALLY_FILLED" => OrderStatus::PartiallyFilled,
+            "FILLED" => OrderStatus::Filled,
+            "CANCELED" => OrderStatus::Cancled,
+            "REJECTED" => OrderStatus::Rejected,
+            "EXPIRED" => OrderStatus::Expired,
+            "EXPIRED_IN_MATCH" => OrderStatus::ExpiredInMatch,
+            _ => panic!("Invalid order status"),
+        }
+    }
 }

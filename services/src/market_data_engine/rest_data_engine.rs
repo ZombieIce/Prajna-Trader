@@ -1,8 +1,12 @@
 use crate::api_enum::FuturesApi;
-use base_libs::market_data_module::binance_data::rest_data;
-use base_libs::market_data_module::general_data::{self, SymbolInfo};
-use base_libs::market_data_module::general_enum;
-use base_libs::mongo_engine::MongoEngine;
+use public::exchange_model::binance_model::rest_data;
+use public::base_model::info_model::{SymbolInfo, ExchangeInfo};
+use public::base_model::market_model::kline_model::Kline;
+use public::base_enum::market_enums::MarketType;
+use crate::mongo_engine::MongoEngine;
+
+
+
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
 use serde_json::Value;
 use tokio;
@@ -122,7 +126,7 @@ impl RestDataEngine {
         self.symbols = symbols.to_vec();
     }
 
-    pub async fn fetch_exchange_info(&self) -> Option<general_data::ExchangeInfo> {
+    pub async fn fetch_exchange_info(&self) -> Option<ExchangeInfo> {
         match reqwest::get(self.get_api(FuturesApi::ExchangeInfo)).await {
             Ok(res) => match res.text().await {
                 Ok(text) => {
@@ -142,10 +146,10 @@ impl RestDataEngine {
                                 .filter(|y| self.symbols.contains(&y.get_symbol().to_lowercase()))
                                 .collect::<Vec<SymbolInfo>>();
                         }
-                        Some(general_data::ExchangeInfo::new(
+                        Some(ExchangeInfo::new(
                             "binance".to_string(),
                             symbol_infos,
-                            general_enum::MarketType::FUTURES,
+                            MarketType::FUTURES,
                             limit,
                             server_time,
                         ))
@@ -200,7 +204,7 @@ impl RestDataEngine {
         &self,
         symbol: &str,
         start_time: i64,
-    ) -> Option<Vec<general_data::Kline>> {
+    ) -> Option<Vec<Kline>> {
         let api_url = self.get_api(FuturesApi::Klines);
         let request_url = format!(
             "{}?symbol={}&interval=5m&startTime={}&limit=1000",
@@ -222,10 +226,10 @@ impl RestDataEngine {
                 match res.text().await {
                     Ok(data) => {
                         if let Ok(klines) = serde_json::from_str::<Vec<Vec<Value>>>(&data) {
-                            let format_kline: Vec<general_data::Kline> = klines
+                            let format_kline: Vec<Kline> = klines
                                 .iter()
                                 .map(|x| {
-                                    general_data::Kline::new(
+                                    Kline::new(
                                         x[0].as_i64().unwrap(),
                                         x[6].as_i64().unwrap(),
                                         x[1].as_str().unwrap().parse::<f64>().unwrap(),

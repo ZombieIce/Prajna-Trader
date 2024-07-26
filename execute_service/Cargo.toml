@@ -1,0 +1,8 @@
+[package]
+name = "execute_service"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+services = { path = "../services" }
+tokio = { workspace = true }

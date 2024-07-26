@@ -1,7 +1,7 @@
 use crate::market_data_module::general_data::{Kline, SymbolInfo};
 use std::collections::HashMap;
 
-use crate::tools::math_tools;
+use crate::tools::common_tools;
 
 use super::{common_module::TargetPosition, portfolio::Portfolio, strategy_error::StrategyError};
 
@@ -52,11 +52,11 @@ impl Order {
     }
 
     pub fn format_order(&mut self, px_precision: i64, qty_precision: i64) {
-        self.set_price(math_tools::round_to_precision(
+        self.set_price(common_tools::round_to_precision(
             self.get_price(),
             px_precision,
         ));
-        self.set_qty(math_tools::round_to_precision(
+        self.set_qty(common_tools::round_to_precision(
             self.get_qty(),
             qty_precision,
         ));
